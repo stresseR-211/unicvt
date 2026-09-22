@@ -1,5 +1,5 @@
-//'course tables are vibecoded
-//did you expect me to fill 'em in byte by byte?
+//why, 'course tables are vibecoded
+//did y'all expect me to fill 'em in byte by byte myself?
 #pragma once
 #include <string>
 #include <string_view>
@@ -53,11 +53,12 @@ inline namespace uni {
 		WIN1255, //hebrew
 		WIN1256, //arabic
 		WIN1257, //baltic
-		KOI8R, KOI8U, KOI8RU,
+		KOI8R, KOI8U, KOI8RU, //cyrillic
 		ISO2022JP, ISO2022CN, ISO2022KR,
-		GBK, BIG5,
+		GBK, BIG5, //chinese
 		#if defined(_WIN32)
 		SYSTEM = encoding::UTF16
+		//redundant
 		//#elif defined(__ANDROID__)
 		//SYSTEM = encoding::UTF8
 		#elif defined(__linux__)
@@ -66,8 +67,6 @@ inline namespace uni {
 			#if TARGET_OS_IPHONE
 		SYSTEM = encoding::UTF16
 			#elif TARGET_OS_MAC
-		SYSTEM = encoding::UTF8
-			#else
 		SYSTEM = encoding::UTF8
 			#endif
 		#else
@@ -678,8 +677,6 @@ inline namespace uni {
 			return {*this};
 		}
 	};
-	template <encoding E> uni::string to_utf8(uni::string sv);
-	template <encoding E> uni::string from_utf8(uni::string sv);
 	template <encoding E> uni::string& unicvt(uni::string& s) {
 		std::u32string codepoints = detail::decode(s.rawdata, s.enc);
 		s.rawdata = detail::encode(codepoints, E);
@@ -720,9 +717,3 @@ template<> struct std::formatter<uni::string> {
 		return std::format_to(ctx.out(), "{}", s.raw().str());
 	}
 };
-
-#include <iostream>
-int main(void) {
-	uni::string u("FUÞARK");
-	std::cout << unicvt<encoding::ASCII>(u).raw().str();
-}
