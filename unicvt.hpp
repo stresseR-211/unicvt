@@ -57,21 +57,21 @@ inline namespace uni {
 		//ISO2022JP, ISO2022CN, ISO2022KR,
 		//GBK, BIG5,
 		#if defined(_WIN32)
-		SYSTEM = UTF16
+		SYSTEM = encoding::UTF16
 		#elif defined(__ANDROID__)
-		SYSTEM = UTF16
+		SYSTEM = encoding::UTF16
 		#elif defined(__linux__)
-		SYSTEM = UTF8
+		SYSTEM = encoding::UTF8
 		#elif defined(__APPLE__)
 			#if TARGET_OS_IPHONE
-		SYSTEM = UTF16
+		SYSTEM = encoding::UTF16
 			#elif TARGET_OS_MAC
-		SYSTEM = UTF8
+		SYSTEM = encoding::UTF8
 			#else
-		SYSTEM = UTF8
+		SYSTEM = encoding::UTF8
 			#endif
 		#else
-		SYSTEM = UTF8
+		SYSTEM = encoding::UTF8
 		#endif
 	};
 	namespace detail {
@@ -260,7 +260,6 @@ inline namespace uni {
 			}
 			return out;
 		}
-		// Windows-125x style: full mapping for 0x80-0xFF; 0x00-0x7F identity; 0 in table → U+FFFD
 		inline std::u32string decode_win_sbcs_table(const std::byte* data, std::size_t n, const win_sbcs_table& tbl) {
 			std::u32string out;
 			out.reserve(n);
@@ -577,7 +576,7 @@ inline namespace uni {
 	class string final {
 		std::vector<std::byte> rawdata;
 		encoding enc;
-		template <encoding From, encoding To> friend uni::string& unicvt(uni::string& s);
+		template <encoding E> friend uni::string& unicvt(uni::string& s);
 		struct rawstrutils {
 			const string& outer;
 			[[nodiscard]] std::string str(void) const {
@@ -661,7 +660,6 @@ inline namespace uni {
 		rawstrutils raw(void) const {
 			return {*this};
 		}
-		template <encoding E> friend uni::string& unicvt(uni::string& s);
 	};
 	template <encoding E> uni::string to_utf8(uni::string sv);
 	template <encoding E> uni::string from_utf8(uni::string sv);
