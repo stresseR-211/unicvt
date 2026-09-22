@@ -101,12 +101,23 @@ inline namespace uni {
 			out.reserve(count);
 			for (std::size_t i = 0; i < count; ++i) {
 				char32_t cp = units[i];
-				if (cp >= 0xD800 && cp <= 0xDBFF && i + 1 < count) {
-					char16_t low = units[i + 1];
-					if (low >= 0xDC00 && low <= 0xDFFF) {
-						cp = 0x10000 + ((cp - 0xD800) << 10) + (low - 0xDC00);
-						++i;
+				// High surrogate
+				if (cp >= 0xD800 && cp <= 0xDBFF) {
+					if (i + 1 < count) {
+						char16_t low = units[i + 1];
+						if (low >= 0xDC00 && low <= 0xDFFF) {
+							cp = 0x10000 + ((cp - 0xD800) << 10) + (low - 0xDC00);
+							++i;
+						} else {
+							cp = 0xFFFD; // Unmatched high surrogate
+						}
+					} else {
+						cp = 0xFFFD; // Truncated high surrogate at end of input
 					}
+				}
+				// Unmatched low surrogate
+				else if (cp >= 0xDC00 && cp <= 0xDFFF) {
+					cp = 0xFFFD;
 				}
 				out.push_back(cp);
 			}
@@ -138,20 +149,48 @@ inline namespace uni {
 			std::size_t i = 0;
 			while (i < n) {
 				unsigned char b0 = p[i];
-				char32_t cp; std::size_t extra;
-				if ((b0 & 0x80) == 0x00) { cp = b0; extra = 0; }
-				else if ((b0 & 0xE0) == 0xC0) { cp = b0 & 0x1F; extra = 1; }
-				else if ((b0 & 0xF0) == 0xE0) { cp = b0 & 0x0F; extra = 2; }
-				else if ((b0 & 0xF8) == 0xF0) { cp = b0 & 0x07; extra = 3; }
-				else { out.push_back(0xFFFD); ++i; continue; } // invalid leading byte
-				if (i + extra >= n) { out.push_back(0xFFFD); break; } // truncated sequence
+				char32_t cp = 0;
+				std::size_t extra = 0;
+				char32_t min_cp = 0;
+				if ((b0 & 0x80) == 0x00) {
+					cp = b0;
+					extra = 0;
+            		min_cp = 0;
+				} else if ((b0 & 0xE0) == 0xC0) {
+					cp = b0 & 0x1F;
+					extra = 1;
+					min_cp = 0x80;
+				} else if ((b0 & 0xF0) == 0xE0) {
+					cp = b0 & 0x0F;
+					extra = 2;
+					min_cp = 0x800;
+				} else if ((b0 & 0xF8) == 0xF0) {
+					cp = b0 & 0x07;
+					extra = 3;
+					min_cp = 0x10000;
+				} else { 
+					out.push_back(0xFFFD); 
+					++i; 
+					continue; 
+				}
+				if (i + extra >= n) {
+					out.push_back(0xFFFD); 
+					break; 
+				}
 				bool valid = true;
 				for (std::size_t k = 1; k <= extra; ++k) {
 					unsigned char bk = p[i + k];
-					if ((bk & 0xC0) != 0x80) { valid = false; break; }
+					if ((bk & 0xC0) != 0x80) {
+						valid = false;
+						break; 
+					}
 					cp = (cp << 6) | (bk & 0x3F);
 				}
-				if (!valid) { out.push_back(0xFFFD); ++i; continue; }
+				if (!valid || cp < min_cp || (cp >= 0xD800 && cp <= 0xDFFF) || cp > 0x10FFFF) {
+					out.push_back(0xFFFD);
+					++i; // Resync by advancing only 1 byte (Unicode W3C recommendation)
+					continue;
+				}
 				out.push_back(cp);
 				i += extra + 1;
 			}
