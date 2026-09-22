@@ -1,3 +1,5 @@
+//'course tables are vibecoded
+//did you expect me to fill 'em in byte by byte?
 #pragma once
 #include <string>
 #include <string_view>
@@ -13,19 +15,21 @@
 #include <format>
 #include <stdexcept>
 #include <algorithm>
+#if defined(__APPLE__)
+	#include <TargetConditionals.h>
+#endif
 inline namespace uni {
 	enum struct encoding {
-		SYSTEM,
 		ASCII,
 		UTF8,
 		UTF16BE, UTF16LE,
-		UTF16 = (std::endian::native == std::endian::big) ? UTF16BE : UTF16LE,
+		UTF16 = (std::endian::native == std::endian::big) ? encoding::UTF16BE : encoding::UTF16LE,
 		UTF32BE, UTF32LE,
-		UTF32 = (std::endian::native == std::endian::big) ? UTF32BE : UTF32LE,
+		UTF32 = (std::endian::native == std::endian::big) ? encoding::UTF32BE : encoding::UTF32LE,
 		UCS2BE, UCS2LE,
-		UCS2 = (std::endian::native == std::endian::big) ? UCS2BE : UCS2LE,
+		UCS2 = (std::endian::native == std::endian::big) ? encoding::UCS2BE : encoding::UCS2LE,
 		UCS4BE, UCS4LE,
-		UCS4 = (std::endian::native == std::endian::big) ? UCS4BE : UCS4LE,
+		UCS4 = (std::endian::native == std::endian::big) ? encoding::UCS4BE : encoding::UCS4LE,
 		ISO8859_1, //western european
 		ISO8859_2, //central european
 		ISO8859_3, //south european
@@ -48,8 +52,25 @@ inline namespace uni {
 		WIN1254, //turkish
 		WIN1255, //hebrew
 		WIN1256, //arabic
-		WIN1257 //baltic
-		//BIG5
+		WIN1257, //baltic
+		//BIG5,
+		#if defined(_WIN32)
+		SYSTEM = UTF16
+		#elif defined(__ANDROID__)
+		SYSTEM = UTF16
+		#elif defined(__linux__)
+		SYSTEM = UTF8
+		#elif defined(__APPLE__)
+			#if TARGET_OS_IPHONE
+		SYSTEM = UTF16
+			#elif TARGET_OS_MAC
+		SYSTEM = UTF8
+			#else
+		SYSTEM = UTF8
+			#endif
+		#else
+		SYSTEM = UTF8
+		#endif
 	};
 	namespace detail {
 		inline void utf8_append_codepoint(std::string& out, char32_t cp) {
@@ -323,22 +344,19 @@ inline namespace uni {
 		}};
 		inline std::u32string decode(const std::vector<std::byte>& rawdata, encoding enc) {
 			switch (enc) {
-				case encoding::SYSTEM:
-					//todo
-					//break;
-				case encoding::UTF8:
+				case encoding::UTF8: [[fallthrough]];
 				case encoding::ASCII:
 					return decode_utf8_bytes(rawdata.data(), rawdata.size());
-				case encoding::UTF16BE:
+				case encoding::UTF16BE: [[fallthrough]];
 				case encoding::UCS2BE:
 					return decode_utf16_bytes(rawdata.data(), rawdata.size(), true);
-				case encoding::UTF16LE:
+				case encoding::UTF16LE: [[fallthrough]];
 				case encoding::UCS2LE:
 					return decode_utf16_bytes(rawdata.data(), rawdata.size(), false);
-				case encoding::UTF32BE:
+				case encoding::UTF32BE: [[fallthrough]];
 				case encoding::UCS4BE:
 					return decode_utf32_bytes(rawdata.data(), rawdata.size(), true);
-				case encoding::UTF32LE:
+				case encoding::UTF32LE: [[fallthrough]];
 				case encoding::UCS4LE:
 					return decode_utf32_bytes(rawdata.data(), rawdata.size(), false);
 				case encoding::ISO8859_1: return decode_single_byte_identity(rawdata.data(), rawdata.size());
@@ -402,24 +420,23 @@ inline namespace uni {
 		}
 		inline std::vector<std::byte> encode(const std::u32string& cps, encoding enc) {
 			switch (enc) {
-				case encoding::UTF8:
-				case encoding::SYSTEM:
+				case encoding::UTF8: [[fallthrough]];
 				case encoding::ASCII: {
 					std::string bytes = codepoints_to_utf8_string(cps);
 					std::vector<std::byte> out(bytes.size());
 					std::memcpy(out.data(), bytes.data(), bytes.size());
 					return out;
 				}
-				case encoding::UTF16BE:
+				case encoding::UTF16BE: [[fallthrough]];
 				case encoding::UCS2BE:
 					return encode_utf16_bytes(cps, true);
-				case encoding::UTF16LE:
+				case encoding::UTF16LE: [[fallthrough]];
 				case encoding::UCS2LE:
 					return encode_utf16_bytes(cps, false);
-				case encoding::UTF32BE:
+				case encoding::UTF32BE: [[fallthrough]];
 				case encoding::UCS4BE:
 					return encode_utf32_bytes(cps, true);
-				case encoding::UTF32LE:
+				case encoding::UTF32LE: [[fallthrough]];
 				case encoding::UCS4LE:
 					return encode_utf32_bytes(cps, false);
 				case encoding::ISO8859_1:
@@ -496,9 +513,8 @@ inline namespace uni {
 			rawdata.resize(sv.length() * sizeof(char32_t));
 			std::memcpy(rawdata.data(), sv.data(), rawdata.size());
 		}
-		explicit string(const string& other) : rawdata(other.rawdata), enc(other.enc) {}
-		explicit string(string&& other) noexcept
-			: rawdata(std::move(other.rawdata)), enc(other.enc) {
+		string(const string& other) : rawdata(other.rawdata), enc(other.enc) {}
+		string(string&& other) noexcept : rawdata(std::move(other.rawdata)), enc(other.enc) {
 			other.enc = encoding::UTF8;
 		}
 		string& operator=(const string& other) {
@@ -521,8 +537,11 @@ inline namespace uni {
 		[[nodiscard]] std::size_t length(void) const {
 			return rawdata.size();
 		}
-		auto operator<=>(const string& other) {
-			return this->length() <=> other.length();
+		std::strong_ordering operator<=>(const string& other) const {
+			return raw().u32str() <=> other.raw().u32str();
+		}
+		bool operator==(const string& other) const {
+			return raw().u32str() == other.raw().u32str();
 		}
 		explicit operator string_t auto() const {
 			return raw().str();
