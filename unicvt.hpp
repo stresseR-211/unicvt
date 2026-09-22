@@ -54,12 +54,12 @@ inline namespace uni {
 		WIN1256, //arabic
 		WIN1257, //baltic
 		KOI8R, KOI8U, KOI8RU,
-		//ISO2022JP, ISO2022CN, ISO2022KR,
-		//GBK, BIG5,
+		ISO2022JP, ISO2022CN, ISO2022KR,
+		GBK, BIG5,
 		#if defined(_WIN32)
 		SYSTEM = encoding::UTF16
-		#elif defined(__ANDROID__)
-		SYSTEM = encoding::UTF16
+		//#elif defined(__ANDROID__)
+		//SYSTEM = encoding::UTF8
 		#elif defined(__linux__)
 		SYSTEM = encoding::UTF8
 		#elif defined(__APPLE__)
@@ -224,6 +224,24 @@ inline namespace uni {
 				cps.push_back(cp);
 			}
 			return cps;
+		}
+		inline std::u32string decode_ascii_bytes(const std::byte* data, std::size_t n) {
+			std::u32string out;
+			out.reserve(n);
+			const auto* p = reinterpret_cast<const unsigned char*>(data);
+			for (std::size_t i = 0; i < n; ++i) {
+				unsigned char b = p[i];
+				out.push_back(b < 0x80 ? static_cast<char32_t>(b) : 0xFFFD);
+			}
+			return out;
+		}
+		inline std::vector<std::byte> encode_ascii_bytes(const std::u32string& cps) {
+			std::vector<std::byte> out;
+			out.reserve(cps.size());
+			for (char32_t cp : cps) {
+				out.push_back(static_cast<std::byte>(cp <= 0x7F ? static_cast<unsigned char>(cp) : '?'));
+			}
+			return out;
 		}
 		inline std::u32string decode_single_byte_identity(const std::byte* data, std::size_t n) {
 			std::u32string out;
@@ -440,9 +458,8 @@ inline namespace uni {
 		}};
 		inline std::u32string decode(const std::vector<std::byte>& rawdata, encoding enc) {
 			switch (enc) {
-				case encoding::UTF8: [[fallthrough]];
-				case encoding::ASCII:
-					return decode_utf8_bytes(rawdata.data(), rawdata.size());
+				case encoding::ASCII: return decode_ascii_bytes(rawdata.data(), rawdata.size());
+				case encoding::UTF8: return decode_utf8_bytes(rawdata.data(), rawdata.size());
 				case encoding::UTF16BE: [[fallthrough]];
 				case encoding::UCS2BE:
 					return decode_utf16_bytes(rawdata.data(), rawdata.size(), true);
@@ -519,8 +536,8 @@ inline namespace uni {
 		}
 		inline std::vector<std::byte> encode(const std::u32string& cps, encoding enc) {
 			switch (enc) {
-				case encoding::UTF8: [[fallthrough]];
-				case encoding::ASCII: {
+				case encoding::ASCII: return encode_ascii_bytes(cps);
+				case encoding::UTF8: {
 					std::string bytes = codepoints_to_utf8_string(cps);
 					std::vector<std::byte> out(bytes.size());
 					std::memcpy(out.data(), bytes.data(), bytes.size());
@@ -703,3 +720,9 @@ template<> struct std::formatter<uni::string> {
 		return std::format_to(ctx.out(), "{}", s.raw().str());
 	}
 };
+
+#include <iostream>
+int main(void) {
+	uni::string u("FUÞARK");
+	std::cout << unicvt<encoding::ASCII>(u).raw().str();
+}
