@@ -54,8 +54,7 @@ inline namespace uni {
 		WIN1256, //arabic
 		WIN1257, //baltic
 		KOI8R, KOI8U, KOI8RU, //cyrillic
-		ISO2022JP, ISO2022CN, ISO2022KR,
-		GBK, BIG5, //chinese
+		EUCJP, EUCKR, GBK, BIG5, //asian
 		#if defined(_WIN32)
 		SYSTEM = encoding::UTF16
 		//redundant
@@ -231,14 +230,6 @@ inline namespace uni {
 			for (std::size_t i = 0; i < n; ++i) {
 				unsigned char b = p[i];
 				out.push_back(b < 0x80 ? static_cast<char32_t>(b) : 0xFFFD);
-			}
-			return out;
-		}
-		inline std::vector<std::byte> encode_ascii_bytes(const std::u32string& cps) {
-			std::vector<std::byte> out;
-			out.reserve(cps.size());
-			for (char32_t cp : cps) {
-				out.push_back(static_cast<std::byte>(cp <= 0x7F ? static_cast<unsigned char>(cp) : '?'));
 			}
 			return out;
 		}
@@ -526,6 +517,14 @@ inline namespace uni {
 			}
 			return out;
 		}
+		inline std::vector<std::byte> encode_ascii_bytes(const std::u32string& cps) {
+			std::vector<std::byte> out;
+			out.reserve(cps.size());
+			for (char32_t cp : cps) {
+				out.push_back(static_cast<std::byte>(cp <= 0x7F ? static_cast<unsigned char>(cp) : '?'));
+			}
+			return out;
+		}
 		inline std::vector<std::byte> encode_single_byte_identity(const std::u32string& cps) {
 			std::vector<std::byte> out;
 			out.reserve(cps.size());
@@ -581,7 +580,7 @@ inline namespace uni {
 				case encoding::KOI8R: return encode_win_sbcs_table(cps, koi8_r_hi);
 				case encoding::KOI8U: return encode_win_sbcs_table(cps, koi8_u_hi);
 				case encoding::KOI8RU: return encode_win_sbcs_table(cps, koi8_ru_hi);
-				default: throw std::runtime_error("uni::string: encoding to this target is not implemented yet");
+				default: throw std::runtime_error("uni::string: encoding to this target is not implemented");
 			}
 		}
 	}
@@ -649,13 +648,27 @@ inline namespace uni {
 		~string(void) noexcept = default;
 		template <typename... T> string(T...) = delete;
 		template <typename... T> auto operator=(T...) = delete;
-		[[nodiscard]] std::size_t size(void) const {
+		[[nodiscard]] std::size_t size_bytes() const noexcept {
 			return rawdata.size();
 		}
-		[[nodiscard]] std::size_t length(void) const {
-			return rawdata.size();
+		[[nodiscard]] std::size_t size_codepoints() const {
+			return detail::decode(rawdata, enc).size();
 		}
-		std::strong_ordering operator<=>(const string& other) const {
+		[[nodiscard]] std::size_t size_codeunits() const {
+			switch (enc) {
+				case encoding::UTF8:
+				case encoding::ASCII:
+					return rawdata.size();
+				case encoding::UTF16BE: case encoding::UTF16LE:
+				case encoding::UCS2BE:  case encoding::UCS2LE:
+					return rawdata.size() / 2;
+				case encoding::UTF32BE: case encoding::UTF32LE:
+				case encoding::UCS4BE:  case encoding::UCS4LE:
+					return rawdata.size() / 4;
+				default: return rawdata.size(); // SBCS default
+			}
+		}
+		auto operator<=>(const string& other) const {
 			return raw().u32str() <=> other.raw().u32str();
 		}
 		bool operator==(const string& other) const {
@@ -684,29 +697,44 @@ inline namespace uni {
 		return s;
 	}
 }
-template<> struct std::formatter<std::u8string> {
+template<> struct std::formatter<std::u8string_view> {
 	constexpr auto parse(std::format_parse_context& ctx) {
 		return ctx.begin();
 	}
-	auto format(const std::u8string& s, std::format_context& ctx) const {
+	auto format(const std::u8string_view& s, std::format_context& ctx) const {
 		std::string_view sv(reinterpret_cast<const char*>(s.data()), s.size());
 		return std::format_to(ctx.out(), "{}", sv);
 	}
 };
-template<> struct std::formatter<std::u16string> {
+template<> struct std::formatter<std::u8string> : std::formatter<std::u8string_view> {
+	auto format(const std::u8string& s, std::format_context& ctx) const {
+		return std::formatter<std::u8string_view>::format(std::u8string_view(s.data(), s.size()), ctx);
+	}
+};
+template<> struct std::formatter<std::u16string_view> {
 	constexpr auto parse(std::format_parse_context& ctx) {
 		return ctx.begin();
 	}
-	auto format(const std::u16string& s, std::format_context& ctx) const {
+	auto format(const std::u16string_view& s, std::format_context& ctx) const {
 		return std::format_to(ctx.out(), "{}", uni::detail::utf16_to_utf8(s));
 	}
 };
-template<> struct std::formatter<std::u32string> {
+template<> struct std::formatter<std::u16string> : std::formatter<std::u16string_view> {
+	auto format(const std::u16string& s, std::format_context& ctx) const {
+		return std::formatter<std::u16string_view>::format(std::u16string_view(s.data(), s.size()), ctx);
+	}
+};
+template<> struct std::formatter<std::u32string_view> {
 	constexpr auto parse(std::format_parse_context& ctx) {
 		return ctx.begin();
 	}
-	auto format(const std::u32string& s, std::format_context& ctx) const {
+	auto format(const std::u32string_view& s, std::format_context& ctx) const {
 		return std::format_to(ctx.out(), "{}", uni::detail::utf32_to_utf8(s));
+	}
+};
+template<> struct std::formatter<std::u32string> : std::formatter<std::u32string_view> {
+	auto format(const std::u32string& s, std::format_context& ctx) const {
+		return std::formatter<std::u32string_view>::format(std::u32string_view(s.data(), s.size()), ctx);
 	}
 };
 template<> struct std::formatter<uni::string> {
