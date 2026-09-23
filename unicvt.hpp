@@ -674,6 +674,34 @@ inline namespace uni {
 		bool operator==(const string& other) const {
 			return raw().u32str() == other.raw().u32str();
 		}
+		template <string_t T> string& operator=(T&& s) {
+			std::string_view sv(std::forward<T>(s));
+			rawdata.resize(sv.length());
+			std::memcpy(rawdata.data(), sv.data(), sv.length());
+			enc = encoding::SYSTEM;
+			return *this;
+		}
+		template <u8string_t T> string& operator=(T&& s) {
+			std::string_view sv(std::forward<T>(s));
+			rawdata.resize(sv.length() * sizeof(char8_t));
+			std::memcpy(rawdata.data(), sv.data(), sv.length());
+			enc = encoding::UTF8;
+			return *this;
+		}
+		template <u16string_t T> string& operator=(T&& s) {
+			std::string_view sv(std::forward<T>(s));
+			rawdata.resize(sv.length() * sizeof(char16_t));
+			std::memcpy(rawdata.data(), sv.data(), sv.length());
+			enc = encoding::UTF16;
+			return *this;
+		}
+		template <u32string_t T> string& operator=(T&& s) {
+			std::string_view sv(std::forward<T>(s));
+			rawdata.resize(sv.length() * sizeof(char32_t));
+			std::memcpy(rawdata.data(), sv.data(), sv.length());
+			enc = encoding::UTF32;
+			return *this;
+		}
 		explicit operator string_t auto() const {
 			return raw().str();
 		}
