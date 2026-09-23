@@ -588,6 +588,7 @@ inline namespace uni {
 	template <typename T> concept u8string_t = std::convertible_to<std::remove_cvref_t<T>, std::u8string_view>;
 	template <typename T> concept u16string_t = std::convertible_to<std::remove_cvref_t<T>, std::u16string_view>;
 	template <typename T> concept u32string_t = std::convertible_to<std::remove_cvref_t<T>, std::u32string_view>;
+	template <typename T> concept wstring_t = std::convertible_to<std::remove_cvref_t<T>, std::wstring_view>;
 	class string final {
 		std::vector<std::byte> rawdata;
 		encoding enc;
@@ -606,6 +607,14 @@ inline namespace uni {
 			};
 			[[nodiscard]] std::u32string u32str(void) const {
 				return detail::decode(outer.rawdata, outer.enc);
+			};
+			[[nodiscard]] std::wstring wstr(void) const {
+				#if defined(_WIN32)
+				auto str = detail::codepoints_to_utf16(detail::decode(outer.rawdata, outer.enc));
+				#else 
+				auto str = detail::decode(outer.rawdata, outer.enc);
+				#endif
+				return reinterpret_cast<const wchar_t*>(str.data());
 			};
 		};
 	public:
@@ -628,6 +637,17 @@ inline namespace uni {
 		explicit string(u32string_t auto s) : rawdata({}), enc(encoding::UTF32) {
 			std::u32string_view sv(s);
 			rawdata.resize(sv.length() * sizeof(char32_t));
+			std::memcpy(rawdata.data(), sv.data(), rawdata.size());
+		}
+		explicit string(wstring_t auto s) : rawdata({}),
+		#if defined(_WIN32)
+			enc(encoding::UTF16)
+		#else
+			enc(encoding::UTF32)
+		#endif
+		{
+			std::wstring_view sv(s);
+			rawdata.resize(sv.length() * sizeof(wchar_t));
 			std::memcpy(rawdata.data(), sv.data(), rawdata.size());
 		}
 		string(const string& other) : rawdata(other.rawdata), enc(other.enc) {}
@@ -682,24 +702,35 @@ inline namespace uni {
 			return *this;
 		}
 		template <u8string_t T> string& operator=(T&& s) {
-			std::string_view sv(std::forward<T>(s));
+			std::u8string_view sv(std::forward<T>(s));
 			rawdata.resize(sv.length() * sizeof(char8_t));
 			std::memcpy(rawdata.data(), sv.data(), sv.length());
 			enc = encoding::UTF8;
 			return *this;
 		}
 		template <u16string_t T> string& operator=(T&& s) {
-			std::string_view sv(std::forward<T>(s));
+			std::u16string_view sv(std::forward<T>(s));
 			rawdata.resize(sv.length() * sizeof(char16_t));
 			std::memcpy(rawdata.data(), sv.data(), sv.length());
 			enc = encoding::UTF16;
 			return *this;
 		}
 		template <u32string_t T> string& operator=(T&& s) {
-			std::string_view sv(std::forward<T>(s));
+			std::u32string_view sv(std::forward<T>(s));
 			rawdata.resize(sv.length() * sizeof(char32_t));
 			std::memcpy(rawdata.data(), sv.data(), sv.length());
 			enc = encoding::UTF32;
+			return *this;
+		}
+		template <wstring_t T> string& operator=(T&& s) {
+			std::wstring_view sv(std::forward<T>(s));
+			rawdata.resize(sv.length() * sizeof(wchar_t));
+			std::memcpy(rawdata.data(), sv.data(), sv.length());
+			#if defined(_WIN32)
+			enc = encoding::UTF16;
+			#else
+			enc = encoding::UTF32;
+			#endif
 			return *this;
 		}
 		explicit operator string_t auto() const {
@@ -773,7 +804,27 @@ template<> struct std::formatter<uni::string> {
 		return std::format_to(ctx.out(), "{}", s.raw().str());
 	}
 };
+
+
+template<> struct std::formatter<std::wstring_view> {
+	constexpr auto parse(std::format_parse_context& ctx) {
+		return ctx.begin();
+	}
+	auto format(const std::wstring_view& s, std::format_context& ctx) const {
+		std::string_view sv(reinterpret_cast<const char*>(s.data()), s.size());
+		return std::format_to(ctx.out(), "{}", sv);
+	}
+};
+template<> struct std::formatter<std::wstring> : std::formatter<std::wstring_view> {
+	auto format(const std::wstring& s, std::format_context& ctx) const {
+		return std::formatter<std::wstring_view>::format(std::wstring_view(s.data(), s.size()), ctx);
+	}
+};
 std::ostream& operator<<(std::ostream& os, const uni::string& u) {
 	os << u.raw().str();
 	return os;
+}
+std::wostream& operator<<(std::wostream& wos, const uni::string& u) {
+	wos << u.raw().wstr();
+	return wos;
 }
