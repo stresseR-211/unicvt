@@ -745,3 +745,7 @@ template<> struct std::formatter<uni::string> {
 		return std::format_to(ctx.out(), "{}", s.raw().str());
 	}
 };
+std::ostream& operator<<(std::ostream& os, const uni::string& u) {
+	os << u.raw().str();
+	return os;
+}

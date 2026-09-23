@@ -7,3 +7,4 @@ ___
 - interpolability of/compatibility with `std::string`, `std::u8string`, `std::u16string`, `std::u32string` via `uni::string`
 - legacy encodings support
 - `std::formatter` specialisations for string types
+- `std::cout::operator<<` overload for `uni::string`
